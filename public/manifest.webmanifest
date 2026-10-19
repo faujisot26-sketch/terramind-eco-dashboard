@@ -1,0 +1,13 @@
+{
+  "name": "TerraMind Eco Dashboard",
+  "short_name": "TerraMind",
+  "description": "A calm, local-first companion for your household's everyday climate choices.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f8f5",
+  "theme_color": "#0f3d2e",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
