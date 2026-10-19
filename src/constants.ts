@@ -22,8 +22,8 @@ export const BENCHMARK_DAILY_HOUSEHOLD_KWH = 10.5;
 export const KG_TO_LBS = 2.20462;
 
 export const INITIAL_PREFERENCES: UserPreferences = {
-  displayName: 'Alex Lawson',
-  location: 'Noida, Uttar Pradesh',
+  displayName: 'Eco Explorer',
+  location: 'Add your city',
   unitSystem: 'metric',
   theme: 'emerald',
   emailWeeklyDigest: true,
@@ -36,7 +36,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     id: 'm-waste-1',
     title: 'Zero Landfill Diverter',
     category: 'Waste',
-    description: 'Divert at least 5.0 kg of household materials through verified recycling or composting logs.',
+    description: 'Log at least 5.0 kg of household materials sent for recycling or composting.',
     metricType: 'waste_recycled_kg',
     targetValue: 5.0,
     unit: 'kg diverted',
@@ -58,7 +58,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     rewardXp: 120,
     isJoined: true,
     isCompleted: false,
-    calculationExplanation: 'Derived directly from the total verified count of electrical appliance entries logged in your Energy Tracker.'
+    calculationExplanation: 'Counted from appliance entries in your Energy Tracker.'
   },
   {
     id: 'm-transport-1',
@@ -73,7 +73,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     isJoined: true,
     manualCheckinCount: 2,
     isCompleted: false,
-    calculationExplanation: 'Tracked via verified individual car-free commute check-ins.'
+    calculationExplanation: 'Tracked via your individual car-free commute check-ins.'
   },
   {
     id: 'm-waste-2',
@@ -101,7 +101,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     rewardXp: 180,
     isJoined: false,
     isCompleted: false,
-    calculationExplanation: 'Calculated directly from verified appliance usage logs.'
+    calculationExplanation: 'Calculated directly from appliance usage logs.'
   }
 ];
 
