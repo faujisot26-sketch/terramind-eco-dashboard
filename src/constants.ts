@@ -23,7 +23,7 @@ export const KG_TO_LBS = 2.20462;
 
 export const INITIAL_PREFERENCES: UserPreferences = {
   displayName: 'Eco Explorer',
-  location: 'Add your city',
+  location: '',
   unitSystem: 'metric',
   theme: 'emerald',
   emailWeeklyDigest: true,
@@ -44,7 +44,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     rewardXp: 150,
     isJoined: true,
     isCompleted: false,
-    calculationExplanation: 'Directly calculated from the sum of kg in your Waste Tracker where disposal method is "Recycled", "Composted", or "Donated/Reused".'
+    calculationExplanation: 'Directly calculated from the sum of kg in your Waste Tracker when disposal method is "Recycled", "Composted", or "Donated/Reused".'
   },
   {
     id: 'm-energy-1',
