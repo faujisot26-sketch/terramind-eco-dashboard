@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 52217)
-Total output lines: 4163
-
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Trash2,
@@ -48,7 +45,8 @@ import {
   Globe,
   Lock,
   HandHeart,
-  DollarSign
+  DollarSign,
+  Leaf
 } from 'lucide-react';
 
 import {
@@ -72,7 +70,6 @@ import {
 import {
   MATERIAL_CARBON_FACTORS,
   REGIONAL_GRID_INTENSITY_KG_PER_KWH,
-  BENCHMARK_DAILY_HOUSEHOLD_KWH,
   KG_TO_LBS,
   INITIAL_PREFERENCES,
   INITIAL_MISSIONS,
@@ -84,6 +81,7 @@ import {
 } from './src/constants';
 
 import { fetchGeminiWithBackoff, getGeminiEndpoint } from './src/services/geminiService';
+import { auditWasteLocally, estimateActionLocally, replyWithLocalGuidance } from './src/services/localEcoTools';
 import { Sidebar } from './src/components/Sidebar';
 import { Header } from './src/components/Header';
 import { MethodologyModal } from './src/components/MethodologyModal';
@@ -106,6 +104,9 @@ export default function App() {
 
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isSampleDatasetPresent, setIsSampleDatasetPresent] = useState(() => {
+    try { return localStorage.getItem('terramind_sample_data_cleared') !== 'true'; } catch { return true; }
+  });
 
   const [wasteEntries, setWasteEntries] = useState<WasteEntry[]>(() => {
     try {
@@ -204,7 +205,10 @@ export default function App() {
 
   const [isEnergyModalOpen, setIsEnergyModalOpen] = useState(false);
   const [editingEnergyId, setEditingEnergyId] = useState<string | null>(null);
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  }, []);
   
   const [energyForm, setEnergyForm] = useState<{
     applianceName: string;
@@ -240,7 +244,7 @@ export default function App() {
     {
       id: 'm-0',
       sender: 'assistant',
-      text: "Hello! I'm your TerraMind AI Eco-Coach. I have live, grounded access to your logged household metrics, waste diversion stats, and peak electrical draws. Ask me anything about practical local reduction, composting guidelines, or load management.",
+      text: "Hi, I’m your TerraMind Eco-Coach. Ask about your logged waste or energy, and I’ll suggest a practical next step. Basic guidance works on this device; optional Gemini answers use the household summary shown in Settings.",
       timestamp: 'Just now'
     }
   ]);
@@ -502,13 +506,10 @@ export default function App() {
     const wasteCarbonSaved = wasteStats.materialAvoidedCarbonKg;
     const smartActionCarbonSaved = confirmedActions.reduce((sum, a) => sum + a.co2SavedKg, 0);
 
-    const activeDates = new Set([...energyEntries.map(e => e.date), ...wasteEntries.map(w => w.date)]);
-    const activeDaysCount = Math.max(1, activeDates.size);
-    const standardHouseholdBaselineKwh = activeDaysCount * BENCHMARK_DAILY_HOUSEHOLD_KWH;
-    const energySavedKwh = Math.max(0, standardHouseholdBaselineKwh - energyStats.totalKwh);
-    const energyCarbonSaved = energySavedKwh * REGIONAL_GRID_INTENSITY_KG_PER_KWH;
-
-    const totalCo2Saved = wasteCarbonSaved + smartActionCarbonSaved + energyCarbonSaved;
+    // Partial appliance logs are not a complete household baseline. Count only
+    // avoided impact with an explicit action or diversion record.
+    const energyEmissionsKg = energyStats.totalKwh * REGIONAL_GRID_INTENSITY_KG_PER_KWH;
+    const totalCo2Saved = wasteCarbonSaved + smartActionCarbonSaved;
     const hasSufficientData = wasteEntries.length > 0 || energyEntries.length > 0 || confirmedActions.length > 0;
 
     const completedMissionsCount = missions.filter(m => m.isCompleted).length;
@@ -521,13 +522,10 @@ export default function App() {
     return {
       wasteCarbonSaved,
       smartActionCarbonSaved,
-      energyCarbonSaved,
+      energyEmissionsKg,
       totalCo2Saved,
       hasSufficientData,
-      computedEcoScore,
-      energySavedKwh,
-      standardHouseholdBaselineKwh,
-      activeDaysCount
+      computedEcoScore
     };
   }, [wasteStats, energyStats, confirmedActions, energyEntries, wasteEntries, missions]);
 
@@ -646,7 +644,7 @@ export default function App() {
         badgeText: w.method,
         details: w.notes,
         numericHighlight: `${formatWeight(w.quantityKg)} ${weightUnit}`,
-        verificationType: 'Verified Log'
+        verificationType: 'Household Log'
       });
     });
 
@@ -661,7 +659,7 @@ export default function App() {
         badgeText: `${e.kwhConsumed.toFixed(2)} kWh`,
         details: e.notes,
         numericHighlight: `${e.kwhConsumed.toFixed(2)} kWh`,
-        verificationType: 'Verified Log'
+        verificationType: 'Household Log'
       });
     });
 
@@ -1036,11 +1034,11 @@ export default function App() {
       monthlySeries,
       hasData
     };
-  }, [wasteEntries, energyEntries, analyticsDateRange]);
+  }, [wasteEntries, energyStats.totalKwh, confirmedActions, missions]);
 
   const handleExportReport = () => {
-    const header = `TerraMind Sustainability Competition Audit Report\nExport Date: ${todayStr}\nDate Range Filter: ${analyticsDateRange}\nUnit System: ${userPreferences.unitSystem}\n\n`;
-    const summary = `--- METHODOLOGY & VERIFIED IMPACT SUMMARY ---\nTotal Waste Logged (${weightUnit}),${formatWeight(analyticsData.totalWasteKg)}\nWaste Diverted/Recycled (${weightUnit}),${formatWeight(analyticsData.recycledWasteKg)}\nTotal Electricity Consumed (kWh),${analyticsData.totalEnergyKwh.toFixed(2)}\nEstimated Net Carbon Mitigated (kg CO2e),${sharedCarbonImpact.totalCo2Saved.toFixed(2)}\nActive Verified Streak (Days),${activeStreakDays}\nComposite Eco-Score (0-100),${sharedCarbonImpact.computedEcoScore || 'N/A'}\n\n`;
+    const header = `TerraMind Household Sustainability Summary\nExport Date: ${todayStr}\nDate Range Filter: ${analyticsDateRange}\nUnit System: ${userPreferences.unitSystem}\n\n`;
+    const summary = `--- METHODOLOGY & HOUSEHOLD IMPACT SUMMARY ---\nTotal Waste Logged (${weightUnit}),${formatWeight(analyticsData.totalWasteKg)}\nWaste Diverted/Recycled (${weightUnit}),${formatWeight(analyticsData.recycledWasteKg)}\nTotal Electricity Consumed (kWh),${analyticsData.totalEnergyKwh.toFixed(2)}\nEstimated Avoided Carbon (kg CO2e),${sharedCarbonImpact.totalCo2Saved.toFixed(2)}\nEstimated Electricity Emissions (kg CO2e),${sharedCarbonImpact.energyEmissionsKg.toFixed(2)}\nActive Logging Streak (Days),${activeStreakDays}\nComposite Eco-Score (0-100),${sharedCarbonImpact.computedEcoScore || 'N/A'}\n\n`;
     const wasteHead = `--- VERIFIED WASTE ENTRIES ---\nDate,Category,Quantity (${weightUnit}),Method,Material Carbon Factor (kg CO2e/kg),Notes\n`;
     const wasteRows = wasteEntries.map(w => `"${w.date}","${w.category}",${formatWeight(w.quantityKg)},"${w.method}",${MATERIAL_CARBON_FACTORS[w.category]},"${(w.notes || '').replace(/"/g, '""')}"`).join('\n');
     const energyHead = `\n\n--- VERIFIED APPLIANCE ENERGY ENTRIES ---\nDate,Appliance,Category,kWh,Grid Intensity Factor (kg CO2e/kWh),Notes\n`;
@@ -1049,7 +1047,7 @@ export default function App() {
     const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(header + summary + wasteHead + wasteRows + energyHead + energyRows);
     const link = document.createElement('a');
     link.setAttribute('href', csvContent);
-    link.setAttribute('download', `terramind_competition_audit_${todayStr}.csv`);
+    link.setAttribute('download', `terramind_household_summary_${todayStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1057,14 +1055,15 @@ export default function App() {
 
   const getUserContextTelemetry = useCallback(() => {
     return `
-User Telemetry & Verified Household Logs:
+Self-reported household records:
 - Location / Region: ${userPreferences.location || 'Unspecified'}
 - Waste Logged: ${wasteStats.total.toFixed(1)} kg total (${wasteStats.recycled.toFixed(1)} kg diverted, Diversion Rate: ${wasteStats.diversionRate}%)
 - Waste Breakdown: Plastic: ${wasteStats.byCategory.Plastic.toFixed(1)}kg, Paper: ${wasteStats.byCategory.Paper.toFixed(1)}kg, Organic: ${wasteStats.byCategory.Organic.toFixed(1)}kg, Glass: ${wasteStats.byCategory.Glass.toFixed(1)}kg, Metal: ${wasteStats.byCategory.Metal.toFixed(1)}kg
 - Electricity Monitored: ${energyStats.totalKwh.toFixed(1)} kWh across ${energyEntries.length} appliance entries.
 - Peak Draw Appliance: ${energyStats.topAppliance ? `${energyStats.topAppliance.name} (${energyStats.topAppliance.kwh.toFixed(1)} kWh)` : 'None recorded yet'}
-- Active Streak: ${activeStreakDays} days with verified logs
-- Model Carbon Mitigated: ${sharedCarbonImpact.totalCo2Saved.toFixed(1)} kg CO2e
+- Active Logging Streak: ${activeStreakDays} days
+- Estimated Avoided Carbon: ${sharedCarbonImpact.totalCo2Saved.toFixed(1)} kg CO2e
+- Estimated Electricity Emissions: ${sharedCarbonImpact.energyEmissionsKg.toFixed(1)} kg CO2e
 - Composite Eco-Score: ${sharedCarbonImpact.computedEcoScore ?? 'N/A'}/100
 - Unit System Preference: ${userPreferences.unitSystem}
 `.trim();
@@ -1090,23 +1089,27 @@ User Telemetry & Verified Household Logs:
     const apiUrl = getGeminiEndpoint(userPreferences.customApiKey);
     if (!apiUrl) {
       setIsCoachLoading(false);
-      setCoachErrorBanner("Gemini API key is missing. Add your Gemini API Key in Settings to enable live, grounded AI coaching.");
-      const errorNotice: CoachMessage = {
-        id: 'bot_keyerr_' + Date.now(),
+      const localReply: CoachMessage = {
+        id: 'bot_local_' + Date.now(),
         sender: 'assistant',
-        text: "I cannot connect to live intelligence without an API configuration. Please navigate to Settings and provide your Gemini API key.",
-        timestamp: 'Just now',
-        isError: true
+        text: replyWithLocalGuidance(promptToSend, {
+          wasteKg: wasteStats.total,
+          divertedKg: wasteStats.recycled,
+          diversionRate: wasteStats.diversionRate,
+          energyKwh: energyStats.totalKwh,
+          topAppliance: energyStats.topAppliance,
+        }),
+        timestamp: 'Just now'
       };
-      setCoachMessages(prev => [...prev, errorNotice]);
+      setCoachMessages(prev => [...prev, localReply]);
       return;
     }
 
     try {
       const userTelemetry = getUserContextTelemetry();
       const systemPrompt = `You are TerraMind's AI Sustainability Coach. You provide evidence-grounded, practical, and location-relevant advice on household carbon footprint reduction, appliance energy management, composting, and recycling.
-Always ground your recommendations in the user's actual verified telemetry provided below whenever relevant.
-Clearly distinguish verified user observations from model estimates. When stating avoided emissions, communicate honest uncertainty and standard modeling assumptions (e.g. regional grid intensity of ~0.82 kg CO2e/kWh, local recycling contamination rates).
+Ground your recommendations in the user's self-reported logs below whenever relevant.
+Clearly distinguish logged quantities from estimates. When discussing emissions, state that the starter factors are approximate and local conditions vary.
 Keep your tone encouraging, direct, and constructive.
 Use web search grounding whenever discussing local regulations, utility rates, or specific certifications.
 
@@ -1178,20 +1181,26 @@ ${userTelemetry}`;
 
     const apiUrl = getGeminiEndpoint(userPreferences.customApiKey);
     if (!apiUrl) {
+      setWasteAuditResult(auditWasteLocally(
+        wasteStats.total,
+        wasteStats.recycled,
+        wasteStats.diversionRate,
+        wasteStats.byCategory,
+        wasteStats.materialAvoidedCarbonKg,
+      ));
       setIsAuditingWaste(false);
-      setWasteAuditError("Missing Gemini API key. Please save your API key in Settings to run AI Waste Audits.");
       return;
     }
 
     try {
-      const wasteSummaryString = `User has logged ${wasteStats.total.toFixed(1)}kg total waste with a ${wasteStats.diversionRate}% diversion rate in ${userPreferences.location || 'Noida / Delhi NCR'}.
+      const wasteSummaryString = `User has logged ${wasteStats.total.toFixed(1)}kg total waste with a ${wasteStats.diversionRate}% diversion rate in ${userPreferences.location || 'an unspecified location'}.
 Breakdown: Plastic: ${wasteStats.byCategory.Plastic.toFixed(1)}kg, Paper: ${wasteStats.byCategory.Paper.toFixed(1)}kg, Organic: ${wasteStats.byCategory.Organic.toFixed(1)}kg, Glass: ${wasteStats.byCategory.Glass.toFixed(1)}kg, Metal: ${wasteStats.byCategory.Metal.toFixed(1)}kg. Total log records: ${wasteEntries.length}.`;
 
       const payload = {
         contents: [
           {
             role: 'user',
-            parts: [{ text: `Analyze this verified household waste dataset and generate a structured competition-grade audit.
+            parts: [{ text: `Analyze this self-reported household waste dataset and generate a structured estimate.
 Be honest about modeling assumptions and regional variability.
 Data:\n${wasteSummaryString}` }]
           }
@@ -1239,7 +1248,7 @@ Data:\n${wasteSummaryString}` }]
     const apiUrl = getGeminiEndpoint(userPreferences.customApiKey);
     if (!apiUrl) {
       setIsAnalyzingAction(false);
-      setSmartActionError("Gemini API key is required to audit custom actions. Set your key in Settings.");
+      setSmartActionFeedback(estimateActionLocally(smartActionInput));
       return;
     }
 
@@ -1457,6 +1466,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
       localStorage.removeItem('terramind_saved_actions');
       localStorage.removeItem('terramind_communities_list');
       localStorage.removeItem('terramind_community_posts');
+      localStorage.setItem('terramind_sample_data_cleared', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -1464,8 +1474,9 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
     setWasteEntries([]);
     setEnergyEntries([]);
     setConfirmedActions([]);
-    setCommunities(INITIAL_COMMUNITIES.map(c => ({ ...c, isJoinedByMe: false })));
-    setCommunityPosts(INITIAL_COMMUNITY_POSTS);
+    setCommunities([]);
+    setCommunityPosts([]);
+    setIsSampleDatasetPresent(false);
     setMissions(prev =>
       prev.map(m => ({
         ...m,
@@ -1487,6 +1498,8 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
     setConfirmedActions(INITIAL_SAVED_ACTIONS);
     setCommunities(INITIAL_COMMUNITIES);
     setCommunityPosts(INITIAL_COMMUNITY_POSTS);
+    setIsSampleDatasetPresent(true);
+    try { localStorage.setItem('terramind_sample_data_cleared', 'false'); } catch (e) { console.error(e); }
     try {
       localStorage.setItem('terramind_waste_entries', JSON.stringify(INITIAL_WASTE_ENTRIES));
       localStorage.setItem('terramind_energy_entries', JSON.stringify(INITIAL_ENERGY_ENTRIES));
@@ -1531,6 +1544,12 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
 
         {/* Content View */}
         <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 w-full">
+          {isSampleDatasetPresent && activeTab !== 'community' && activeTab !== 'settings' && (
+            <div role="note" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-xs text-emerald-950">
+              <p><strong>Example records are loaded.</strong> They make the dashboard easy to explore; clear them in Settings before mixing in your household data. Your edits stay in this browser.</p>
+              <button type="button" onClick={() => setActiveTab('settings')} className="shrink-0 rounded-xl border border-emerald-200 bg-white px-3 py-2 font-bold text-emerald-800 hover:bg-emerald-100">Set up my data</button>
+            </div>
+          )}
           {activeTab === 'community' ? (
             <div className="space-y-8 animate-fadeIn">
               {/* Community Header Banner */}
@@ -1572,9 +1591,9 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
               <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/70 rounded-2xl flex items-start gap-3 text-xs text-emerald-950 shadow-2xs">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <p className="font-bold text-emerald-900">Competition Prototype Architecture Notice</p>
+                  <p className="font-bold text-emerald-900">Example community data</p>
                   <p className="text-emerald-800/90 leading-relaxed">
-                    Communities, volunteer check-ins, and funding support operate in your browser sandbox using persistent local storage. In a live production deployment, community hubs synchronize via real-time websockets and secure server authentication.
+                    Community names, member counts, posts, volunteer drives, and pledges are sample content saved in this browser. This feed is not connected to real people or a neighborhood network; pledges are simulated and no money moves.
                   </p>
                 </div>
               </div>
@@ -2210,7 +2229,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Verified Log: Sum of all logged records</span>
+                    <span>From your logs: sum of all recorded entries</span>
                   </div>
                 </div>
 
@@ -2227,7 +2246,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-teal-700">
                     <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Verified Log: {wasteStats.diversionRate}% Diversion Rate</span>
+                    <span>From your logs: {wasteStats.diversionRate}% diversion</span>
                   </div>
                 </div>
 
@@ -2257,9 +2276,156 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-  …2217 tokens truncated….5 text-[11px] font-semibold text-slate-500">
+                  {(['Plastic', 'Paper', 'Organic', 'Glass', 'Metal'] as WasteCategory[]).map(cat => {
+                    const amountKg = wasteStats.byCategory[cat] || 0;
+                    const percentage = wasteStats.total > 0 ? Math.round((amountKg / wasteStats.total) * 100) : 0;
+                    const factor = MATERIAL_CARBON_FACTORS[cat];
+                    
+                    return (
+                      <div key={cat} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-800">{cat}</span>
+                            <span className="text-xs font-bold text-emerald-800">{percentage}%</span>
+                          </div>
+                          <div className="mt-2.5">
+                            <span className="text-xl font-bold text-slate-900">{formatWeight(amountKg)}</span>
+                            <span className="text-xs ml-1 font-semibold text-slate-600">{weightUnit}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2 border-t border-slate-200/60">
+                          <span className="block text-[10px] text-slate-500 font-medium">
+                            Avoids {factor.toFixed(2)} kg CO₂e / kg
+                          </span>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${percentage}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Entries Table */}
+              <div className="bg-white rounded-3xl border border-emerald-100/80 shadow-xs overflow-hidden">
+                <div className="p-5 border-b border-emerald-100/60 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Recent Waste Log Entries</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Records with disposal channel and verified timestamps</p>
+                  </div>
+                  <span className="text-xs text-emerald-700 bg-emerald-50 font-bold px-2.5 py-1 rounded-full border border-emerald-200/50">
+                    {wasteEntries.length} Household Records
+                  </span>
+                </div>
+
+                {wasteEntries.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <p className="text-xs text-slate-500 mb-4">No waste logs recorded yet.</p>
+                    <button
+                      onClick={handleOpenAddWaste}
+                      className="text-xs font-bold px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition cursor-pointer"
+                    >
+                      Log First Entry
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/80 text-xs font-bold text-slate-400 border-b border-slate-100 uppercase tracking-wider">
+                        <tr>
+                          <th className="px-5 py-3">Category</th>
+                          <th className="px-5 py-3">Quantity</th>
+                          <th className="px-5 py-3">Date</th>
+                          <th className="px-5 py-3">Disposal Method</th>
+                          <th className="px-5 py-3">Notes</th>
+                          <th className="px-5 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {wasteEntries.map(entry => (
+                          <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-5 py-3.5 font-medium text-slate-800">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-200/60">
+                                {entry.category}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-900 font-bold">
+                              {formatWeight(entry.quantityKg)} {weightUnit}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-600 text-xs whitespace-nowrap">
+                              {entry.date}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                                {entry.method}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500 text-xs max-w-xs truncate">
+                              {entry.notes || '—'}
+                            </td>
+                            <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  onClick={() => handleOpenEditWaste(entry)}
+                                  className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                  title="Edit entry"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteWaste(entry.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : activeTab === 'energy' ? (
+            <div className="space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-emerald-100">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-emerald-950 flex items-center gap-2.5">
+                    <Zap className="w-6 h-6 text-amber-500" />
+                    Energy Tracker
+                  </h1>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Appliance electricity entries feed real-time calculations across the Dashboard, Analytics, and Quests.
+                  </p>
+                </div>
+                <button
+                  onClick={handleOpenAddEnergy}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Log Appliance Usage</span>
+                </button>
+              </div>
+
+              {/* Energy Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <div className="bg-white p-6 rounded-3xl border border-emerald-100/80 shadow-xs relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Consumption</span>
+                    <Zap className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-3xl font-extrabold text-slate-900">{energyStats.totalKwh.toFixed(1)}</span>
+                    <span className="text-sm font-bold text-slate-500">kWh</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Verified Log: Sum of logged appliance power</span>
+                    <span>From your logs: sum of recorded appliance readings</span>
                   </div>
                 </div>
 
@@ -2309,7 +2475,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                 <div className="p-5 border-b border-emerald-100/60 flex items-center justify-between">
                   <h2 className="text-base font-bold text-slate-900">Appliance Energy Log Entries</h2>
                   <span className="text-xs text-amber-800 bg-amber-50 font-bold px-2.5 py-1 rounded-full border border-amber-200/50">
-                    {energyEntries.length} Verified Logs
+                    {energyEntries.length} Energy Readings
                   </span>
                 </div>
 
@@ -2371,7 +2537,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                     Impact Analytics
                   </h1>
                   <p className="text-sm text-slate-500 mt-1">
-                    Multi-stream ecological trends calculated strictly from your verified entries.
+                    Multi-stream ecological trends calculated from the entries you record.
                   </p>
                 </div>
 
@@ -2407,7 +2573,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Recycled / Diverted</span>
                     <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                      Verified Log
+                      Household Log
                     </span>
                   </div>
                   <div className="mt-3 flex items-baseline gap-2">
@@ -2421,7 +2587,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Electricity</span>
                     <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full border border-amber-200">
-                      Verified Log
+                      Household Log
                     </span>
                   </div>
                   <div className="mt-3 flex items-baseline gap-2">
@@ -2842,7 +3008,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                         />
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1">
-                        Stored strictly in your local browser. Never transmitted to third-party tracking servers.
+                        The key stays in this browser. When you use Gemini, your question and a summary of your logged waste, energy and city are sent to Google. Use a restricted key and remove it here when you are done; local guidance works without a key.
                       </p>
                     </div>
                   </div>
@@ -2880,7 +3046,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                       className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reload Competition Seed Data</span>
+                      <span>Reload Example Data</span>
                     </button>
                     <button
                       type="button"
@@ -2905,15 +3071,15 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   <div className="max-w-2xl space-y-2">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-white/10 text-emerald-200 border border-white/15 backdrop-blur-md">
                       <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Competition-Verified Household Telemetry</span>
+                      <span>Small habits, visible impact</span>
                     </div>
 
                     <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
-                      Welcome back, {userPreferences.displayName.split(' ')[0] || 'Alex'}!
+                      Welcome, {userPreferences.displayName || 'Eco Explorer'}
                     </h1>
 
                     <p className="text-emerald-100/90 text-sm sm:text-base leading-relaxed font-normal">
-                      Your home ecosystem in <strong className="text-white font-semibold">{userPreferences.location}</strong> has diverted <strong className="text-white font-bold">{formatWeight(wasteStats.recycled)} {weightUnit}</strong> of materials and monitored <strong className="text-white font-bold">{energyStats.totalKwh.toFixed(1)} kWh</strong> across {energyEntries.length} connected appliances.
+                      Your household{userPreferences.location && userPreferences.location !== 'Add your city' ? <> in <strong className="text-white font-semibold">{userPreferences.location}</strong></> : null} has diverted <strong className="text-white font-bold">{formatWeight(wasteStats.recycled)} {weightUnit}</strong> of materials and recorded <strong className="text-white font-bold">{energyStats.totalKwh.toFixed(1)} kWh</strong> across {energyEntries.length} appliance logs.
                     </p>
                   </div>
 
@@ -2956,7 +3122,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   className="bg-white p-6 rounded-3xl border border-emerald-100/90 shadow-xs hover:shadow-md transition-all group cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Carbon Mitigated</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Estimated Avoided Carbon</span>
                     <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition-transform">
                       <TrendingUp className="w-4 h-4" />
                     </div>
@@ -2970,12 +3136,12 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                         <span className="text-xs font-bold text-slate-500">kg CO₂e</span>
                       </>
                     ) : (
-                      <span className="text-base font-bold text-slate-400 italic">No logs recorded</span>
+                      <span className="text-base font-bold text-slate-400 italic">No avoided impact yet</span>
                     )}
                   </div>
                   <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="underline decoration-dotted">Model Lifecycle Estimate (Click for math)</span>
+                    <span className="underline decoration-dotted">Approximation from diverted materials and logged actions</span>
                   </div>
                 </div>
 
@@ -2994,7 +3160,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   </div>
                   <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700">
                     <Activity className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Verified Log: {energyEntries.length} appliance logs</span>
+                    <span>Household Log: {energyEntries.length} appliance logs</span>
                   </div>
                 </div>
 
@@ -3013,7 +3179,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   </div>
                   <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-teal-700">
                     <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Verified Log: {wasteStats.diversionRate}% Diversion Rate</span>
+                    <span>From your logs: {wasteStats.diversionRate}% diversion</span>
                   </div>
                 </div>
 
@@ -3199,7 +3365,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                   <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                       <Clock className="w-4 h-4 text-emerald-600" />
-                      Recent Verified Entries
+                      Recent Entries
                     </h2>
                     <button
                       onClick={() => setActiveTab('timeline')}
