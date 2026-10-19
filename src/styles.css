@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #152b25;
+  background: #f4f8f5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  color-scheme: light;
+  --terra-forest: #0f3d2e;
+  --terra-moss: #1d694f;
+  --terra-mint: #dff2e5;
+  --terra-lime: #d7ee9b;
+  --terra-paper: #f4f8f5;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 360px; background: var(--terra-paper); }
+body { min-width: 360px; margin: 0; background: var(--terra-paper); }
+button, input, select, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+::selection { background: #cdebd3; color: #123f30; }
+
+/* Give the imported dashboard a calmer, more tactile finish while preserving its utility layout. */
+#root { min-height: 100vh; }
+#root > div { min-height: 100vh; }
+body:has(#root > div) { background-image: radial-gradient(ellipse at 82% 4%, rgba(221, 241, 226, .55), transparent 33rem); }
+
+input, select, textarea {
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid rgba(30, 112, 80, .28);
+  outline-offset: 2px;
+}
+
+button { transition: transform 140ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+button:active { transform: translateY(1px); }
+
+img { max-width: 100%; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #c9d8ce; border: 3px solid #f4f8f5; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #9fb8a8; }
+
+.startup-fallback {
+  min-height: 100vh; display: grid; place-content: center; justify-items: start;
+  padding: 32px; background: #f4f8f5; color: #163a2d;
+}
+.startup-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: #dff2e5; color: #1d694f; font-size: 30px; }
+.startup-eyebrow { margin: 20px 0 0; color: #527360; font-size: 11px; font-weight: 800; letter-spacing: .22em; }
+.startup-fallback h1 { max-width: 520px; margin: 10px 0; font-size: clamp(30px, 5vw, 48px); line-height: 1.04; letter-spacing: -.04em; }
+.startup-fallback p:not(.startup-eyebrow) { max-width: 440px; color: #61766a; line-height: 1.6; }
+.startup-fallback button { margin-top: 12px; border: 0; border-radius: 12px; background: #0f3d2e; color: #fff; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+
+@media (max-width: 640px) {
+  html, body { min-width: 320px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
