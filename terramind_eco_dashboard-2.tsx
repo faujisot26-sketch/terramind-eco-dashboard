@@ -1039,9 +1039,9 @@ export default function App() {
   const handleExportReport = () => {
     const header = `TerraMind Household Sustainability Summary\nExport Date: ${todayStr}\nDate Range Filter: ${analyticsDateRange}\nUnit System: ${userPreferences.unitSystem}\n\n`;
     const summary = `--- METHODOLOGY & HOUSEHOLD IMPACT SUMMARY ---\nTotal Waste Logged (${weightUnit}),${formatWeight(analyticsData.totalWasteKg)}\nWaste Diverted/Recycled (${weightUnit}),${formatWeight(analyticsData.recycledWasteKg)}\nTotal Electricity Consumed (kWh),${analyticsData.totalEnergyKwh.toFixed(2)}\nEstimated Avoided Carbon (kg CO2e),${sharedCarbonImpact.totalCo2Saved.toFixed(2)}\nEstimated Electricity Emissions (kg CO2e),${sharedCarbonImpact.energyEmissionsKg.toFixed(2)}\nActive Logging Streak (Days),${activeStreakDays}\nComposite Eco-Score (0-100),${sharedCarbonImpact.computedEcoScore || 'N/A'}\n\n`;
-    const wasteHead = `--- VERIFIED WASTE ENTRIES ---\nDate,Category,Quantity (${weightUnit}),Method,Material Carbon Factor (kg CO2e/kg),Notes\n`;
+    const wasteHead = `--- SELF-REPORTED WASTE ENTRIES ---\nDate,Category,Quantity (${weightUnit}),Method,Material Carbon Factor (kg CO2e/kg),Notes\n`;
     const wasteRows = wasteEntries.map(w => `"${w.date}","${w.category}",${formatWeight(w.quantityKg)},"${w.method}",${MATERIAL_CARBON_FACTORS[w.category]},"${(w.notes || '').replace(/"/g, '""')}"`).join('\n');
-    const energyHead = `\n\n--- VERIFIED APPLIANCE ENERGY ENTRIES ---\nDate,Appliance,Category,kWh,Grid Intensity Factor (kg CO2e/kWh),Notes\n`;
+    const energyHead = `\n\n--- SELF-REPORTED APPLIANCE ENERGY ENTRIES ---\nDate,Appliance,Category,kWh,Grid Intensity Factor (kg CO2e/kWh),Notes\n`;
     const energyRows = energyEntries.map(e => `"${e.date}","${(e.applianceName || '').replace(/"/g, '""')}","${e.category}",${e.kwhConsumed},${REGIONAL_GRID_INTENSITY_KG_PER_KWH},"${(e.notes || '').replace(/"/g, '""')}"`).join('\n');
 
     const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(header + summary + wasteHead + wasteRows + energyHead + energyRows);
@@ -1291,7 +1291,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
         detectedCategory: parsed.detectedCategory || 'Eco-Action',
         co2SavedKg: Number(parsed.co2SavedKg) || 0,
         points: Number(parsed.points) || 20,
-        insight: parsed.insight || 'Action verified by sustainability model.',
+        insight: parsed.insight || 'Illustrative estimate; based on your self-reported action.',
         confidenceRating: parsed.confidenceRating || 'Approximate',
         assumptionsUsed: parsed.assumptionsUsed || 'Derived from regional lifecycle transport and grid emission equivalencies.'
       });
@@ -1706,7 +1706,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                               <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/60 rounded-2xl border border-emerald-100 text-xs">
                                 {post.wasteCollectedKg && (
                                   <div>
-                                    <span className="text-[10px] uppercase font-bold text-emerald-800">Verified Waste Cleared</span>
+                                    <span className="text-[10px] uppercase font-bold text-emerald-800">Waste diverted</span>
                                     <p className="text-base font-black text-emerald-950 mt-0.5">
                                       {formatWeight(post.wasteCollectedKg)} {weightUnit}
                                     </p>
@@ -2272,7 +2272,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                     <PieChartIcon className="w-4 h-4 text-emerald-600" />
                     Waste Breakdown by Material &amp; Avoided Carbon Factor
                   </h2>
-                  <span className="text-xs text-slate-400 font-medium">Life-cycle factors calibrated to ISO 14040/44</span>
+                  <span className="text-xs text-slate-400 font-medium">Starter factors are illustrative estimates</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -2313,10 +2313,10 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                 <div className="p-5 border-b border-emerald-100/60 flex items-center justify-between">
                   <div>
                     <h2 className="text-base font-bold text-slate-900">Recent Waste Log Entries</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Records with disposal channel and verified timestamps</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Household entries with a disposal method and date</p>
                   </div>
                   <span className="text-xs text-emerald-700 bg-emerald-50 font-bold px-2.5 py-1 rounded-full border border-emerald-200/50">
-                    {wasteEntries.length} Household Records
+                    {wasteEntries.length} Waste records
                   </span>
                 </div>
 
@@ -2694,7 +2694,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                     Eco Missions &amp; Quests
                   </h1>
                   <p className="text-sm text-slate-500 mt-1">
-                    Progress is tied directly to your verified Waste and Energy Tracker logs.
+                    Progress is based on your self-reported Waste and Energy Tracker entries.
                   </p>
                 </div>
                 <span className="text-xs font-bold px-3 py-1.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200/60 flex items-center gap-1.5 shadow-2xs">
@@ -2800,7 +2800,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                     Activity Timeline
                   </h1>
                   <p className="text-sm text-slate-500 mt-1">
-                    Unified feed of verified waste logs, appliance entries, completed quests, and green actions.
+                    A timeline of your logged waste, appliance entries, completed quests, and green actions.
                   </p>
                 </div>
               </div>
@@ -3216,7 +3216,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
                     <div>
                       <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                         <BarChart2 className="w-4 h-4 text-emerald-600" />
-                        Verified Activity Trends
+                        Logged Activity Trends
                       </h2>
                       <p className="text-xs text-slate-400 mt-0.5">
                         Aggregation of your logged waste entries, energy draws, and green actions
@@ -4102,7 +4102,7 @@ Estimate avoided CO2e in kg, pick one category ("Energy", "Waste", "Commute", "W
 
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] text-slate-400">
-                    Distinguishes verified actions from model estimates
+                    Your entries are self-reported; impact figures are illustrative estimates.
                   </span>
                   <button
                     onClick={handleAnalyzeSmartAction}
