@@ -1,14 +1,16 @@
-const CACHE = 'terramind-shell-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg'];
+const CACHE = 'terramind-shell-v2';
+const BASE = new URL(self.registration.scope).pathname;
+const SHELL_URL = new URL(BASE, self.location.origin).href;
+const ASSET_URLS = [`${BASE}manifest.webmanifest`, `${BASE}favicon.svg`];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    const page = await fetch('/');
+    const page = await fetch(SHELL_URL);
     const html = await page.clone().text();
-    await cache.put('/', page);
-    await cache.addAll(['/manifest.webmanifest', '/favicon.svg']);
-    const assets = [...html.matchAll(/(?:src|href)="([^\"]+\.(?:js|css))"/g)].map((match) => match[1]);
+    await cache.put(SHELL_URL, page);
+    await cache.addAll(ASSET_URLS);
+    const assets = [...html.matchAll(/(?:src|href)="([^\"]+\.(?:js|css))"/g)].map((match) => new URL(match[1], SHELL_URL).href);
     await Promise.all(assets.map(async (asset) => {
       const response = await fetch(asset);
       if (response.ok) await cache.put(asset, response);
@@ -40,7 +42,7 @@ self.addEventListener('fetch', (event) => {
       }
       return response;
     } catch (error) {
-      if (request.mode === 'navigate') return (await caches.match('/')) || Response.error();
+      if (request.mode === 'navigate') return (await caches.match(SHELL_URL)) || Response.error();
       throw error;
     }
   })());
