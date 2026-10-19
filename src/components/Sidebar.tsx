@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-2">
                 <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
                 <span className="text-xs font-bold text-emerald-950">
-                  {activeStreakDays > 0 ? `${activeStreakDays}-Day Verified Streak` : 'Streak Inactive'}
+                  {activeStreakDays > 0 ? `${activeStreakDays}-Day Logging Streak` : 'Streak Inactive'}
                 </span>
               </div>
               <span className="text-xs font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-200/50 shadow-2xs">
