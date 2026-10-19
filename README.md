@@ -9,6 +9,8 @@ npm install
 npm run dev
 ```
 
+The public demo is published with GitHub Pages at <https://faujisot26-sketch.github.io/terramind-eco-dashboard/>. Pushes to `main` rebuild and publish it automatically.
+
 Create an optimized static build with `npm run build`; serve the `dist/` folder from any HTTPS static host. After the first visit, the installed PWA shell can open offline. Your logs are saved in this browser on this device; they do not sync between devices.
 
 ## Features
