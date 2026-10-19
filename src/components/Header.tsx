@@ -31,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
           <span className="text-emerald-700 font-bold uppercase tracking-wider text-[11px]">{activeTab}</span>
           <span>/</span>
-          <span className="text-slate-700 font-medium">Competition Live System</span>
+          <span className="text-slate-700 font-medium">Small changes, visible impact</span>
         </div>
       </div>
 
