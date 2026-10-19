@@ -33,9 +33,6 @@ export async function fetchGeminiWithBackoff(url: string, payload: any, maxRetri
 
 export function getGeminiEndpoint(customKey?: string): string | null {
   let key = customKey?.trim();
-  if (!key && typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
-    key = process.env.GEMINI_API_KEY;
-  }
   if (!key) {
     return null;
   }
