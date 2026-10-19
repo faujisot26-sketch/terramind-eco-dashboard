@@ -89,7 +89,7 @@ export interface TimelineFeedItem {
   badgeText: string;
   details?: string;
   numericHighlight?: string;
-  verificationType: 'Verified Log' | 'Model Estimate' | 'Gamified Achievement';
+  verificationType: 'Household Log' | 'Model Estimate' | 'Gamified Achievement';
 }
 
 export interface UserPreferences {
